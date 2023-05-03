@@ -38,6 +38,11 @@ final public class ByteEncoderChannel extends AbstractEncoderChannel implements
 
 	private final OutputStream os;
 	protected int len;
+	
+	/**
+	 * Merely supports getPosition().
+	 */	
+	private final Position position;
 
 	/**
 	 * Construct a byte aligned encoder from output stream.
@@ -48,6 +53,7 @@ final public class ByteEncoderChannel extends AbstractEncoderChannel implements
 	public ByteEncoderChannel(OutputStream os) {
 		this.os = os;
 		len = 0;
+		this.position = new Position();
 	}
 
 	public OutputStream getOutputStream() {
@@ -124,4 +130,17 @@ final public class ByteEncoderChannel extends AbstractEncoderChannel implements
 		}
 	}
 
+	/**
+	 * Class whose toString() function provides the encoder position of
+	 * the enclosing class instance.
+	 *
+	 */
+	private class Position {
+		public String toString() {
+			return Integer.toString(len);
+		}
+	}
+	
+	@Override
+	protected Object getPosition() { return position; }
 }

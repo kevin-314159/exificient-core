@@ -31,6 +31,11 @@ import com.siemens.ct.exi.core.values.DateTimeValue;
 import com.siemens.ct.exi.core.values.FloatValue;
 import com.siemens.ct.exi.core.values.IntegerValue;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
+
 /**
  * 
  * @author Daniel.Peintner.EXT@siemens.com
@@ -40,11 +45,35 @@ import com.siemens.ct.exi.core.values.IntegerValue;
 
 public abstract class AbstractEncoderChannel implements EncoderChannel {
 
+
+	/**
+	 * Logger for this class and for subclasses.
+	 */
+	protected static Logger LOGGER = LoggerFactory.getLogger(AbstractEncoderChannel.class);
+
+	/**
+	 * Marker to use when logging.
+	 * When a log-generating function A calls a log-generating function B,
+	 * A may add a {@link Marker} to marker before the call to B, and remove it after the
+	 * call to B, so that B's events that occur in the context of A can be
+	 * filtered out by the marker.  This is used, for example, to mark events
+	 * associated with encoding the individual characters of a string.
+	 */
+	protected Marker marker = MarkerFactory.getMarker("");
+	
+	/**
+	 *  Marker for individual character events.
+	 */
+	protected static final Marker CHAR_MARKER = 
+			MarkerFactory.getMarker("CHARACTER_LEVEL");
+
 	/**
 	 * Encode a binary value as a length-prefixed sequence of octets.
 	 */
 	public void encodeBinary(byte[] b) throws IOException {
+		LOGGER.trace(marker, "enc binary value length ({})", b.length);
 		encodeUnsignedInteger(b.length);
+		LOGGER.trace(marker, "enc binary value content");
 		encode(b, 0, b.length);
 	}
 
@@ -56,6 +85,8 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	public void encodeString(final String s) throws IOException {
 		final int lenChars = s.length();
 		final int lenCharacters = s.codePointCount(0, lenChars);
+		
+		LOGGER.trace(marker, "enc string value # of chars ({})", lenCharacters);
 		encodeUnsignedInteger(lenCharacters);
 		encodeStringOnly(s);
 	}
@@ -65,17 +96,34 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	 */
 	public void encodeStringOnly(final String s) throws IOException {
 		final int lenChars = s.length();
+		
+		boolean log = LOGGER.isTraceEnabled();
+		int byteCnt = 0;
+		
+		if (log) LOGGER.trace(marker, "enc string value content");
+		
+		marker.add(CHAR_MARKER);
+		
 		for (int i = 0; i < lenChars; i++) {
 			final char ch = s.charAt(i);
 
 			// Is this a UTF-16 surrogate pair?
 			if (Character.isHighSurrogate(ch)) {
 				// use code-point and increment loop count (2 char's)
-				encodeUnsignedInteger(s.codePointAt(i++));
+				int codePoint = s.codePointAt(i++);
+				encodeUnsignedInteger(codePoint);
+				if (log) byteCnt += MethodsBag.numberOf7BitBlocksToRepresent(codePoint);
 			} else {
 				encodeUnsignedInteger(ch);
+				if (log) byteCnt += MethodsBag.numberOf7BitBlocksToRepresent(ch);
 			}
 		}
+		
+		marker.remove(CHAR_MARKER);
+		
+		if (log) LOGGER.trace(
+				"string value content encoded in {} bytes",
+				byteCnt);
 	}
 
 	/**
@@ -84,7 +132,8 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	 * zero to indicate sequence termination. Only seven bits per octet are used
 	 * to store the integer's value.
 	 */
-	public void encodeInteger(int n) throws IOException {
+	public void encodeInteger(int n) throws IOException {	
+		LOGGER.trace(marker, "enc integer minus sign");		
 		// signalize sign
 		if (n < 0) {
 			encodeBoolean(true);
@@ -94,10 +143,11 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 		} else {
 			encodeBoolean(false);
 			encodeUnsignedInteger(n);
-		}
+		}		
 	}
 
 	protected void encodeLong(long l) throws IOException {
+		LOGGER.trace(marker, "encode long integer minus sign");
 		// signalize sign
 		if (l < 0) {
 			encodeBoolean(true);
@@ -109,6 +159,7 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	}
 
 	protected void encodeBigInteger(BigInteger bi) throws IOException {
+		LOGGER.trace(marker, "encode big integer minus sign");
 		if (bi.signum() < 0) {
 			encodeBoolean(true); // negative
 			encodeUnsignedBigInteger(bi.negate().subtract(BigInteger.ONE));
@@ -147,11 +198,14 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 		}
 
 		if (n < 128) {
+			LOGGER.trace(marker, "enc unsigned int in 1 byte");
 			// write byte as is
 			encode(n);
 		} else {
 			final int n7BitBlocks = MethodsBag.numberOf7BitBlocksToRepresent(n);
 
+			LOGGER.trace(marker, "enc unsigned int in {} bytes", n7BitBlocks);
+			
 			switch (n7BitBlocks) {
 			case 5:
 				encode(128 | n);
@@ -173,23 +227,31 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	}
 
 	protected void encodeUnsignedLong(long l) throws IOException {
+		int byteCnt = 0;
+		
 		if (l < 0) {
 			throw new UnsupportedOperationException();
 		}
 
 		int lastEncode = (int) l;
 		l >>>= 7;
-
+		byteCnt += 1;
+		
 		while (l != 0) {
 			encode(lastEncode | 128);
 			lastEncode = (int) l;
 			l >>>= 7;
+			byteCnt += 1;
 		}
 
 		encode(lastEncode);
+		byteCnt += 1;
+		
+		LOGGER.trace(marker, "enc unsigned long in {} bytes", byteCnt);
 	}
 
 	protected void encodeUnsignedBigInteger(BigInteger bi) throws IOException {
+		
 		if (bi.signum() < 0) {
 			throw new UnsupportedOperationException();
 		}
@@ -198,7 +260,8 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 		// approach: write byte per byte
 		int m = bi.bitLength() % 7;
 		int nbytes = bi.bitLength() / 7 + (m > 0 ? 1 : 0);
-
+		int byteCnt = nbytes;
+		
 		while (--nbytes > 0) {
 			// 1XXXXXXX ... 1XXXXXXX
 			encode(128 | bi.intValue());
@@ -207,6 +270,8 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 
 		// 0XXXXXXX
 		encode(0 | bi.intValue());
+		
+		LOGGER.trace(marker, "enc unsigned big int in {} bytes", byteCnt);
 	}
 
 	public void encodeUnsignedIntegerValue(IntegerValue iv) throws IOException {
@@ -238,8 +303,11 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	public void encodeDecimal(boolean negative, IntegerValue integral,
 			IntegerValue reverseFraction) throws IOException, RuntimeException {
 		// sign, integral, reverse fractional
+		LOGGER.trace(marker, "enc decimal minus sign");
 		encodeBoolean(negative);
+		LOGGER.trace(marker, "enc decimal integral");
 		encodeUnsignedIntegerValue(integral);
+		LOGGER.trace(marker, "enc decimal rev frac");
 		encodeUnsignedIntegerValue(reverseFraction);
 	}
 
@@ -250,32 +318,42 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 	 */
 	public void encodeFloat(FloatValue fv) throws IOException {
 		// encode mantissa and exponent
+		LOGGER.trace(marker, "enc float mantissa");
 		encodeIntegerValue(fv.getMantissa());
+		LOGGER.trace(marker, "enc float exponent");
 		encodeIntegerValue(fv.getExponent());
 	}
 
 	public void encodeDateTime(DateTimeValue datetime) throws IOException {
 		switch (datetime.type) {
 		case gYear: // Year, [Time-Zone]
+			LOGGER.trace(marker, "enc dt year");
 			encodeInteger(datetime.year - DateTimeValue.YEAR_OFFSET);
 			break;
 		case gYearMonth: // Year, MonthDay, [TimeZone]
 		case date: // Year, MonthDay, [TimeZone]
+			LOGGER.trace(marker, "enc dt year");
 			encodeInteger(datetime.year - DateTimeValue.YEAR_OFFSET);
+			LOGGER.trace(marker, "enc dt monthDay");
 			encodeNBitUnsignedInteger(datetime.monthDay,
 					DateTimeValue.NUMBER_BITS_MONTHDAY);
 			break;
 		case dateTime: // Year, MonthDay, Time, [FractionalSecs],
 			// [TimeZone]
+			LOGGER.trace(marker, "enc dt year");
 			encodeInteger(datetime.year - DateTimeValue.YEAR_OFFSET);
+			LOGGER.trace(marker, "enc dt monthDay");
 			encodeNBitUnsignedInteger(datetime.monthDay,
 					DateTimeValue.NUMBER_BITS_MONTHDAY);
 			// Note: *no* break;
 		case time: // Time, [FractionalSecs], [TimeZone]
+			LOGGER.trace(marker, "enc dt time");
 			this.encodeNBitUnsignedInteger(datetime.time,
 					DateTimeValue.NUMBER_BITS_TIME);
+			LOGGER.trace(marker, "enc dt frac secs presence");
 			if (datetime.presenceFractionalSecs) {
 				encodeBoolean(true);
+				LOGGER.trace(marker, "enc dt frac secs");
 				encodeUnsignedInteger(datetime.fractionalSecs);
 			} else {
 				encodeBoolean(false);
@@ -284,6 +362,7 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 		case gMonth: // MonthDay, [TimeZone]
 		case gMonthDay: // MonthDay, [TimeZone]
 		case gDay: // MonthDay, [TimeZone]
+			LOGGER.trace(marker, "enc dt monthDay");
 			encodeNBitUnsignedInteger(datetime.monthDay,
 					DateTimeValue.NUMBER_BITS_MONTHDAY);
 			break;
@@ -291,8 +370,10 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 			throw new UnsupportedOperationException();
 		}
 		// [TimeZone]
+		LOGGER.trace(marker, "enc dt tz presence");
 		if (datetime.presenceTimezone) {
 			encodeBoolean(true);
+			LOGGER.trace(marker, "enc dt timezone");
 			encodeNBitUnsignedInteger(datetime.timezone
 					+ DateTimeValue.TIMEZONE_OFFSET_IN_MINUTES,
 					DateTimeValue.NUMBER_BITS_TIMEZONE);
@@ -300,5 +381,11 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 			encodeBoolean(false);
 		}
 	}
-
+	
+	/**
+	 * Return an Object whose toString method returns a string that
+	 * represents that current encoding position which can be used
+	 * in log messages.
+	 */
+	protected abstract Object getPosition();
 }

@@ -65,6 +65,9 @@ import com.siemens.ct.exi.core.values.StringValue;
 import com.siemens.ct.exi.core.values.Value;
 import com.siemens.ct.exi.core.values.ValueType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * 
  * @author Daniel.Peintner.EXT@siemens.com
@@ -105,6 +108,11 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 	protected EventType lastEvent;
 
 	private final String MISUSE_OF_PRESERVE_PREFIXES_ERROR = "A prefix with value null cannot be used in Preserve.Prefixes mode. Report prefix or set your XML reader to do so. e.g., SAX xmlReader.setFeature(\"http://xml.org/sax/features/namespaces\", true); and xmlReader.setFeature(\"http://xml.org/sax/features/namespace-prefixes\", false);";
+	
+	/**
+	 * Logger for use by this class and subclasses.
+	 */
+	protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractEXIBodyEncoder.class); 
 
 	public AbstractEXIBodyEncoder(EXIFactory exiFactory) throws EXIException {
 		super(exiFactory);
@@ -149,13 +157,20 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			// uri string value was not found
 			// ==> zero (0) as an n-nit unsigned integer
 			// followed by uri encoded as string
+			LOGGER.atTrace().log(
+					"uri partition miss on {}; enc zero then uri", namespaceUri);
 			channel.encodeNBitUnsignedInteger(0, numberBitsUri);
 			channel.encodeString(namespaceUri);
 			// after encoding string value is added to table
 			ruc = this.addUri(namespaceUri);
+			LOGGER.atTrace().log("uri {} assigned id {}",
+					namespaceUri, ruc.namespaceUriID);
 		} else {
 			// string value found
 			// ==> value(i+1) is encoded as n-bit unsigned integer
+			LOGGER.atTrace().log(
+					"uri partition hit on uri {}; enc id ({})", 
+					namespaceUri, ruc.namespaceUriID);
 			channel.encodeNBitUnsignedInteger(ruc.namespaceUriID + 1,
 					numberBitsUri);
 		}
@@ -194,6 +209,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 					pfxID = 0;
 				}
 
+				LOGGER.atTrace().log("enc prefix id = {}", pfxID);
+				
 				// overlapping URIs
 				channel.encodeNBitUnsignedInteger(pfxID,
 						MethodsBag.getCodingLength(numberOfPrefixes));
@@ -211,21 +228,36 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			// string value was not found in local partition
 			// ==> string literal is encoded as a String
 			// with the length of the string incremented by one
+			LOGGER.atTrace().log(
+					"localName partition ({}) miss on localName {}",
+					ruc.getNamespaceUri(), localName);
+			
+			LOGGER.atTrace().log("enc localName length");
 			channel.encodeUnsignedInteger(localName.length() + 1);
+			LOGGER.atTrace().log("enc localName content");
 			channel.encodeStringOnly(localName);
 			// After encoding the string value, it is added to the string
 			// table partition and assigned the next available compact
 			// identifier.
 			qnc = ruc.addQNameContext(localName);
+			LOGGER.atTrace().log(
+					"localName {} assigned id {}", localName,
+					qnc.getLocalNameID());
 		} else {
 			// string value found in local partition
 			// ==> string value is represented as zero (0) encoded as an
 			// Unsigned Integer followed by an the compact identifier of the
 			// string value as an n-bit unsigned integer n is log2 m and m is
 			// the number of entries in the string table partition
+			LOGGER.atTrace().log(
+					"localName partition ({}) hit on localName {}; enc len of 0",
+					qnc.getNamespaceUri(), localName);			
 			channel.encodeUnsignedInteger(0);
 			int n = MethodsBag.getCodingLength(ruc.getNumberOfQNames());
-			channel.encodeNBitUnsignedInteger(qnc.getLocalNameID(), n);
+			int id = qnc.getLocalNameID();
+			LOGGER.atTrace().log(
+					"enc localName id = {}", id);		
+			channel.encodeNBitUnsignedInteger(id, n);
 		}
 
 		return qnc;
@@ -284,19 +316,27 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		int codeLength = fidelityOptions
 				.get1stLevelEventCodeLength(getCurrentGrammar());
 		if (codeLength > 0) {
-			channel.encodeNBitUnsignedInteger(pos, codeLength);
+			LOGGER.atTrace().log("enc event code={}", pos);
+			channel.encodeNBitUnsignedInteger(pos, codeLength);			
+		} else {
+			LOGGER.atTrace().log("enc event code={} using 0 bits", pos);
 		}
 	}
 
 	protected void encode2ndLevelEventCode(int pos) throws IOException {
 		// 1st level
 		final Grammar currentGrammar = getCurrentGrammar();
-		channel.encodeNBitUnsignedInteger(currentGrammar.getNumberOfEvents(),
-				fidelityOptions.get1stLevelEventCodeLength(currentGrammar));
+		int ec1 = currentGrammar.getNumberOfEvents();
+		
+		LOGGER.atTrace().log("enc event code={}.{}",
+				ec1, pos);
+		
+		channel.encodeNBitUnsignedInteger(ec1, fidelityOptions.get1stLevelEventCodeLength(currentGrammar));
 
 		// 2nd level
 		// int ch2 = currentGrammar.get2ndLevelCharacteristics(fidelityOptions);
 		int ch2 = fidelityOptions.get2ndLevelCharacteristics(currentGrammar);
+
 		assert (pos < ch2);
 
 		channel.encodeNBitUnsignedInteger(pos, MethodsBag.getCodingLength(ch2));
@@ -305,19 +345,27 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 	protected void encode3rdLevelEventCode(int pos) throws IOException {
 		// 1st level
 		final Grammar currentGrammar = getCurrentGrammar();
-		channel.encodeNBitUnsignedInteger(currentGrammar.getNumberOfEvents(),
-				fidelityOptions.get1stLevelEventCodeLength(currentGrammar));
-
+		int ec1 = currentGrammar.getNumberOfEvents();
+		
 		// 2nd level
 		// int ch2 = currentGrammar.get2ndLevelCharacteristics(fidelityOptions);
 		int ch2 = fidelityOptions.get2ndLevelCharacteristics(currentGrammar);
 		int ec2 = ch2 > 0 ? ch2 - 1 : 0; // any 2nd level events
-		channel.encodeNBitUnsignedInteger(ec2, MethodsBag.getCodingLength(ch2));
-
+		
 		// 3rd level
 		int ch3 = fidelityOptions.get3rdLevelCharacteristics();
 
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.atTrace().log("event code={}.{}.{}",
+					ec1, ec2, pos);
+		}
+		
+		channel.encodeNBitUnsignedInteger(ec1, fidelityOptions.get1stLevelEventCodeLength(currentGrammar));
+			
+		channel.encodeNBitUnsignedInteger(ec2, MethodsBag.getCodingLength(ch2));
+
 		assert (pos < ch3);
+		
 		channel.encodeNBitUnsignedInteger(pos, MethodsBag.getCodingLength(ch3));
 	}
 
@@ -337,6 +385,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			throw new EXIException("No EXI Event found for startDocument");
 		}
 
+		LOGGER.atTrace().log("enc event SD (0 bytes)");
+		
 		// update current rule
 		updateCurrentRule(ei.getNextGrammar());
 
@@ -349,6 +399,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		Production ei = getCurrentGrammar().getProduction(
 				EventType.END_DOCUMENT);
 
+		LOGGER.atTrace().log("enc event ED");
+		
 		if (ei != null) {
 			// encode EventCode
 			encode1stLevelEventCode(ei.getEventCode());
@@ -367,7 +419,7 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 	public void encodeStartElement(String uri, String localName, String prefix)
 			throws EXIException, IOException {
 		checkPendingCharacters(EventType.START_ELEMENT);
-
+	
 		sePrefix = prefix;
 		seUri = uri;
 
@@ -379,6 +431,9 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		Grammar currentGrammar = getCurrentGrammar();
 		if ((ei = currentGrammar.getStartElementProduction(uri, localName)) != null) {
 			assert (ei.getEvent().isEventType(EventType.START_ELEMENT));
+			
+			LOGGER.atTrace().log("enc event SE({{}}:{})", uri, localName);
+			
 			// encode 1st level EventCode
 			encode1stLevelEventCode(ei.getEventCode());
 			// next SE ...
@@ -389,15 +444,19 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			}
 			// next context rule
 			updContextRule = ei.getNextGrammar();
-
+			
+         
 		} else if ((ei = currentGrammar.getStartElementNSProduction(uri)) != null) {
 			assert (ei.getEvent().isEventType(EventType.START_ELEMENT_NS));
+			
+			LOGGER.atTrace().log("enc event SE({}:*) for {}", uri, localName);
+			
 			// encode 1st level EventCode
 			encode1stLevelEventCode(ei.getEventCode());
 
 			StartElementNS seNS = (StartElementNS) ei.getEvent();
 			RuntimeUriContext uc = getUri(seNS.getNamespaceUriID());
-
+			
 			// encode local-name (and prefix)
 			QNameContext qnc = encodeLocalName(localName, uc, channel);
 			if (preservePrefix) {
@@ -421,6 +480,9 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 				updContextRule = ei.getNextGrammar();
 			} else {
 				// Undeclared SE(*) can be found on 2nd level
+			   
+            LOGGER.atTrace().log("enc event SE(*) for {{}}:{}", uri, localName);
+            
 				int ecSEundeclared = fidelityOptions.get2ndLevelEventCode(
 						EventType.START_ELEMENT_GENERIC_UNDECLARED,
 						currentGrammar);
@@ -453,7 +515,7 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 					break;
 				}
 			}
-
+			
 			// encode entire qualified name
 			QNameContext qnc = encodeQName(uri, localName, channel);
 			if (preservePrefix) {
@@ -573,6 +635,9 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 
 			// event code
 			final Grammar currentGrammar = getCurrentGrammar();
+			
+			LOGGER.atTrace().log("enc event NS for {{}} using prefix {}", uri, prefix);
+			
 			int ec2 = fidelityOptions.get2ndLevelEventCode(
 					EventType.NAMESPACE_DECLARATION, currentGrammar);
 			assert (fidelityOptions.get2ndLevelEventType(ec2, currentGrammar) == EventType.NAMESPACE_DECLARATION);
@@ -602,6 +667,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		Grammar currentGrammar = getCurrentGrammar();
 		Production ei = currentGrammar.getProduction(EventType.END_ELEMENT);
 
+	   LOGGER.atTrace().log("enc event EE");
+		
 		if (ei != null) {
 			// encode EventCode (common case)
 			encode1stLevelEventCode(ei.getEventCode());
@@ -646,7 +713,7 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 				}
 			}
 		}
-
+		
 		// pop element from stack
 		ElementContext ec = popElement();
 
@@ -1018,6 +1085,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		Grammar currentGrammar = getCurrentGrammar();
 		if ((ei = currentGrammar.getAttributeProduction(uri, localName)) != null) {
 			// declared AT(uri:localName)
+			LOGGER.atTrace().log("enc event AT({{}}:{})", uri, localName);
+			
 			Attribute at = (Attribute) (ei.getEvent());
 			qnc = at.getQNameContext();
 
@@ -1183,6 +1252,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 
 		QNameContext qnc;
 		if (ei.getEvent().isEventType(EventType.ATTRIBUTE_NS)) {
+			LOGGER.atTrace().log("enc event AT({}:*) for {}", uri, localName);
+			
 			// declared AT(uri:*)
 			AttributeNS atNS = (AttributeNS) ei.getEvent();
 			// localname only
@@ -1191,6 +1262,7 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 
 		} else {
 			// declared AT(*)
+			LOGGER.atTrace().log("enc event AT(*) for {{}}:{}", uri, localName);
 			qnc = encodeQName(uri, localName, channel);
 		}
 		return qnc;
@@ -1199,6 +1271,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 	private QNameContext encodeUndeclaredAT(Grammar currentGrammar, String uri,
 			String localName) throws EXIException, IOException {
 
+		LOGGER.atTrace().log("enc event AT(*) for {{}}:{})", uri, localName);
+		
 		// event-code
 		encodeAttributeEventCodeUndeclared(currentGrammar, localName);
 
@@ -1575,6 +1649,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		Grammar currentGrammar = getCurrentGrammar();
 		Production ei = currentGrammar.getProduction(EventType.CHARACTERS);
 
+		LOGGER.atTrace().log("enc event CH");
+		
 		// valid value and valid event-code ?
 		if (ei != null
 				&& isTypeValid(((DatatypeEvent) ei.getEvent()).getDatatype(),
@@ -1663,6 +1739,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 		if (fidelityOptions.isFidelityEnabled(FidelityOptions.FEATURE_DTD)) {
 			checkPendingCharacters(EventType.DOC_TYPE);
 
+			LOGGER.atTrace().log("enc event DT");
+			
 			// DOCTYPE can be found on 2nd level
 			int ec2 = fidelityOptions.get2ndLevelEventCode(EventType.DOC_TYPE,
 					getCurrentGrammar());
@@ -1696,6 +1774,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			// grammar learning restricting (if necessary)
 			doLimitGrammarLearningForErCmPi();
 
+			LOGGER.atTrace().log("enc event ER");
+			
 			// EntityReference can be found on 2nd level
 			Grammar currentGrammar = getCurrentGrammar();
 			int ec2 = fidelityOptions.get2ndLevelEventCode(
@@ -1717,6 +1797,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 
 			// grammar learning restricting (if necessary)
 			doLimitGrammarLearningForErCmPi();
+			
+			LOGGER.atTrace().log("enc event CM");
 
 			// comments can be found on 3rd level
 			final Grammar currentGrammar = getCurrentGrammar();
@@ -1739,6 +1821,8 @@ public abstract class AbstractEXIBodyEncoder extends AbstractEXIBodyCoder
 			// grammar learning restricting (if necessary)
 			doLimitGrammarLearningForErCmPi();
 
+			LOGGER.atTrace().log("enc event PI");
+			
 			// processing instructions can be found on 3rd level
 			final Grammar currentGrammar = getCurrentGrammar();
 			int ec3 = fidelityOptions

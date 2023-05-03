@@ -79,6 +79,7 @@ public class EXIHeaderEncoder extends AbstractEXIHeader {
 
 			// EXI Cookie
 			if (headerOptions.isOptionEnabled(EncodingOptions.INCLUDE_COOKIE)) {
+				LOGGER.atTrace().log("enc EXI cookie (4 bytes)");
 				// four byte field consists of four characters " $ " , " E ",
 				// " X " and " I " in that order
 				headerChannel.encode('$');
@@ -88,15 +89,20 @@ public class EXIHeaderEncoder extends AbstractEXIHeader {
 			}
 
 			// Distinguishing Bits 10
+			LOGGER.atTrace().log("enc distinguishing bits");
 			headerChannel.encodeNBitUnsignedInteger(2, 2);
 
 			// Presence Bit for EXI Options 0
 			boolean includeOptions = headerOptions
 					.isOptionEnabled(EncodingOptions.INCLUDE_OPTIONS);
+			
+			LOGGER.atTrace().log("enc header options presence");
 			headerChannel.encodeBoolean(includeOptions);
 
 			// EXI Format Version 0-0000
+			LOGGER.atTrace().log("enc EXI preview flag");
 			headerChannel.encodeBoolean(false); // preview
+			LOGGER.atTrace().log("enc EXI format version");
 			headerChannel.encodeNBitUnsignedInteger(0, 4);
 
 			// EXI Header options and so forth
@@ -118,6 +124,8 @@ public class EXIHeaderEncoder extends AbstractEXIHeader {
 	public void writeEXIOptions(EXIFactory f, EncoderChannel encoderChannel)
 			throws EXIException, IOException {
 
+		LOGGER.atTrace().log("enc header options");
+		
 		EXIBodyEncoderInOrder encoder = (EXIBodyEncoderInOrder) getHeaderFactory()
 				.createEXIBodyEncoder();
 		encoder.setOutputChannel(encoderChannel);
@@ -449,6 +457,8 @@ public class EXIHeaderEncoder extends AbstractEXIHeader {
 
 		encoder.encodeEndElement(); // header
 		encoder.encodeEndDocument();
+		
+		LOGGER.atTrace().log("finished encoding header options");
 	}
 
 	protected boolean isLessCommon(EXIFactory f) {

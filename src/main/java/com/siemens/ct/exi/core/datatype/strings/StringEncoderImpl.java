@@ -68,6 +68,9 @@ public class StringEncoderImpl extends AbstractStringCoder implements
 				 * Unsigned Integer followed by the compact identifier of the
 				 * string value in the "local" value partition
 				 */
+				LOGGER.atTrace().log(
+						"value local partition hit; id = {}; encode 0 then id",
+						vc.localValueID);				
 				valueChannel.encodeUnsignedInteger(0);
 				int numberBitsLocal = MethodsBag
 						.getCodingLength(getNumberOfStringValues(context));
@@ -79,6 +82,9 @@ public class StringEncoderImpl extends AbstractStringCoder implements
 				 * as an Unsigned Integer followed by the compact identifier of
 				 * the String value in the global value partition.
 				 */
+				LOGGER.atTrace().log(
+						"value global partition hit; id = {}; encode 1 then id",
+						vc.globalValueID);				
 				valueChannel.encodeUnsignedInteger(1);
 				// global value size
 
@@ -94,11 +100,16 @@ public class StringEncoderImpl extends AbstractStringCoder implements
 			 * by two.
 			 */
 			final int L = value.codePointCount(0, value.length());
+			LOGGER.atTrace().log(
+					"value partition miss; encode # of chars ({}) + 2",
+					L);	
 			valueChannel.encodeUnsignedInteger(L + 2);
 			/*
 			 * If length L is greater than zero the string S is added
 			 */
 			if (L > 0) {
+				LOGGER.atTrace().log("enc string");
+
 				valueChannel.encodeStringOnly(value);
 				// After encoding the string value, it is added to both the
 				// associated "local" value string table partition and the
@@ -128,6 +139,11 @@ public class StringEncoderImpl extends AbstractStringCoder implements
 		ValueContainer vc = new ValueContainer(value, qnc,
 				getNumberOfStringValues(qnc), stringValues.size());
 
+		LOGGER.atTrace().log("value partition addition; partition={},"
+				+ " value={}, localId={}, globalId={}",
+				qnc.getQName(),
+				value, vc.localValueID, vc.globalValueID);
+		
 		// global context
 		stringValues.put(value, vc);
 

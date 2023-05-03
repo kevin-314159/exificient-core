@@ -26,6 +26,9 @@ package com.siemens.ct.exi.core.io.channel;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
+
 import com.siemens.ct.exi.core.io.BitOutputStream;
 
 /**
@@ -42,6 +45,11 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	 * Underlying bit output stream to which bits and bytes are written.
 	 */
 	protected BitOutputStream ostream;
+	
+	/**
+	 * Merely supports getPosition().
+	 */
+	private Position position;
 
 	/**
 	 * Construct an encoder from output stream.
@@ -51,6 +59,7 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	 */
 	public BitEncoderChannel(OutputStream ostream) {
 		this.ostream = new BitOutputStream(ostream);
+		this.position = new Position();
 	}
 
 	public OutputStream getOutputStream() {
@@ -69,6 +78,14 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	}
 
 	public void align() throws IOException {
+		if (LOGGER.isTraceEnabled()) {
+			if (!ostream.isByteAligned() ) {
+				int padding = 8 - ostream.getBitsInBuffer() % 8;
+				LOGGER.trace(marker, "enc alignment; pad with {} bits @ pos {}", 
+						ostream.getBitsInBuffer(),
+						padding, position);
+			}
+		}
 		ostream.align();
 	}
 
@@ -88,6 +105,9 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	 * b starting with the most significant, i.e. from left to right.
 	 */
 	public void encodeNBitUnsignedInteger(int b, int n) throws IOException {
+		LOGGER.trace(marker, "enc {}-bit unsigned int @ pos {}", 
+				n, position);
+		
 		if (b < 0 || n < 0) {
 			throw new IllegalArgumentException(
 					"Encode negative value as unsigned integer is invalid!");
@@ -103,6 +123,8 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	 * value is encode as bit 1.
 	 */
 	public void encodeBoolean(boolean b) throws IOException {
+		LOGGER.trace(marker, "enc boolean in 1 bit @ pos {}", position);
+		
 		if (b) {
 			ostream.writeBit1();
 		} else {
@@ -111,4 +133,24 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 
 		// ostream.writeBit(b ? 1 : 0);
 	}
+	
+	/**
+	 * Class whose toString() function provides the encoder position of
+	 * the enclosing class instance.
+	 *
+	 */
+	private class Position {
+		public String toString() {
+			StringBuilder sb = new StringBuilder();
+			sb.append(ostream.getLength());
+			if (!ostream.isByteAligned()) {
+				sb.append(':');
+				sb.append(ostream.getBitsInBuffer());
+			}
+			return sb.toString();
+		}
+	}
+	
+	@Override
+	protected Object getPosition() { return position; }
 }

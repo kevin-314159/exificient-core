@@ -25,6 +25,9 @@ package com.siemens.ct.exi.core.coder;
 
 import javax.xml.namespace.QName;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.siemens.ct.exi.core.EXIFactory;
 import com.siemens.ct.exi.core.FidelityOptions;
 import com.siemens.ct.exi.core.context.GrammarContext;
@@ -76,6 +79,11 @@ public abstract class AbstractEXIHeader {
 	public static final int NUMBER_OF_FORMAT_VERSION_BITS = 4;
 	public static final int FORMAT_VERSION_CONTINUE_VALUE = 15;
 
+	/**
+	 * Logger for this class and for subclasses.
+	 */
+	protected static Logger LOGGER = LoggerFactory.getLogger(AbstractEXIHeader.class);
+			
 	protected EXIFactory headerFactory;
 
 	protected EXIFactory getHeaderFactory() throws EXIException {

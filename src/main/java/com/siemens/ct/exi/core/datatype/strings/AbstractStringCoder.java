@@ -28,6 +28,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.siemens.ct.exi.core.context.QNameContext;
 import com.siemens.ct.exi.core.values.StringValue;
 
@@ -39,6 +42,12 @@ import com.siemens.ct.exi.core.values.StringValue;
  */
 
 public abstract class AbstractStringCoder implements StringCoder {
+	
+	/**
+	 * Logger for use by this class and subclasses.
+	 */
+	protected static final Logger LOGGER = 
+			LoggerFactory.getLogger(AbstractStringCoder.class);
 
 	// indicate whether local value partitions are used
 	protected final boolean localValuePartitions;
