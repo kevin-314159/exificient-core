@@ -31,6 +31,9 @@ import java.util.Map;
 
 import javax.xml.namespace.QName;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.siemens.ct.exi.core.Constants;
 import com.siemens.ct.exi.core.EXIFactory;
 import com.siemens.ct.exi.core.FidelityOptions;
@@ -104,6 +107,11 @@ public abstract class AbstractEXIBodyCoder {
 	protected final int maxBuiltInProductions;
 	protected int learnedProductions;
 
+	/**
+	 * Logger for use by this class and subclasses.
+	 */
+	protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractEXIBodyCoder.class);
+	
 	public AbstractEXIBodyCoder(EXIFactory exiFactory) throws EXIException {
 		this.exiFactory = exiFactory;
 

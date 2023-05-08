@@ -89,6 +89,7 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 		try {
 			// EXI Cookie
 			if (headerChannel.lookAhead() == '$') {
+				LOGGER.atTrace().log("dec EXI cookie (4 bytes)");
 				int h0 = headerChannel.decode();
 				int h1 = headerChannel.decode();
 				int h2 = headerChannel.decode();
@@ -100,6 +101,7 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 
 			// An EXI header starts with Distinguishing Bits part, which is a
 			// two bit field 1 0
+			LOGGER.atTrace().log("dec EXI distinguishing bits");
 			if (headerChannel
 					.decodeNBitUnsignedInteger(NUMBER_OF_DISTINGUISHING_BITS) != DISTINGUISHING_BITS_VALUE) {
 				throw new EXIException(
@@ -107,6 +109,7 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 			}
 
 			// Presence Bit for EXI Options
+			LOGGER.atTrace().log("dec EXI options presence");
 			boolean presenceOptions = headerChannel.decodeBoolean();
 
 			// EXI Format Version (1 4+)
@@ -117,6 +120,7 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 			// A value of 0 indicates this is a final version and a value of 1
 			// indicates this is a preview version.
 			// @SuppressWarnings("unused")
+			LOGGER.atTrace().log("dec EXI preview flag");
 			boolean previewVersion = headerChannel.decodeBoolean();
 			assert (!previewVersion);
 
@@ -130,6 +134,7 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 			// number.
 			int value;
 			int version = 0;
+			LOGGER.atTrace().log("dec EXI version");
 			do {
 				value = headerChannel
 						.decodeNBitUnsignedInteger(NUMBER_OF_FORMAT_VERSION_BITS);
@@ -137,6 +142,8 @@ public class EXIHeaderDecoder extends AbstractEXIHeader {
 			} while (value == FORMAT_VERSION_CONTINUE_VALUE);
 			assert (version == 0);
 
+			LOGGER.atTrace().log("decoded EXI version = {}", version+1);
+			
 			// [EXI Options] ?
 			EXIFactory exiFactory;
 			if (presenceOptions) {

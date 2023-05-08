@@ -107,10 +107,12 @@ public class EXIBodyDecoderInOrder extends AbstractEXIBodyDecoder {
 	}
 
 	public void decodeStartDocument() throws EXIException {
+		LOGGER.atTrace().log("event: SD");
 		decodeStartDocumentStructure();
 	}
 
 	public void decodeEndDocument() throws EXIException, IOException {
+		LOGGER.atTrace().log("event: ED");
 		decodeEndDocumentStructure();
 	}
 
@@ -136,6 +138,8 @@ public class EXIBodyDecoderInOrder extends AbstractEXIBodyDecoder {
 
 	public QNameContext decodeEndElement() throws EXIException, IOException {
 		ElementContext ec;
+		LOGGER.atTrace().log("event: EE");
+		
 		switch (this.nextEventType) {
 		case END_ELEMENT:
 			ec = decodeEndElementStructure();
@@ -164,6 +168,7 @@ public class EXIBodyDecoderInOrder extends AbstractEXIBodyDecoder {
 
 	public NamespaceDeclaration decodeNamespaceDeclaration()
 			throws EXIException, IOException {
+		LOGGER.atTrace().log("event: NS");		
 		return decodeNamespaceDeclarationStructure();
 	}
 
@@ -255,6 +260,9 @@ public class EXIBodyDecoderInOrder extends AbstractEXIBodyDecoder {
 
 	public Value decodeCharacters() throws EXIException, IOException {
 		Datatype dt;
+		
+		LOGGER.atTrace().log("event: CH");
+		
 		switch (this.nextEventType) {
 		case CHARACTERS:
 			dt = decodeCharactersStructure();
@@ -282,15 +290,18 @@ public class EXIBodyDecoderInOrder extends AbstractEXIBodyDecoder {
 	}
 
 	public char[] decodeComment() throws EXIException, IOException {
+		LOGGER.atTrace().log("event: CM");
 		return decodeCommentStructure();
 	}
 
 	public ProcessingInstruction decodeProcessingInstruction()
 			throws EXIException, IOException {
+		LOGGER.atTrace().log("event: PI");
 		return decodeProcessingInstructionStructure();
 	}
 
 	public DocType decodeDocType() throws EXIException, IOException {
+		LOGGER.atTrace().log("event: DT");
 		return decodeDocTypeStructure();
 	}
 

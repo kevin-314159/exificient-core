@@ -135,6 +135,8 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	protected RuntimeUriContext decodeUri(DecoderChannel channel)
 			throws IOException {
+		
+		LOGGER.atTrace().log("dec URI id");
 		int numberBitsUri = MethodsBag.getCodingLength(getNumberOfUris() + 1); // numberEntries+1
 		int uriID = channel.decodeNBitUnsignedInteger(numberBitsUri);
 
@@ -144,13 +146,17 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 			// string value was not found
 			// ==> zero (0) as an n-nit unsigned integer
 			// followed by uri encoded as string
+			LOGGER.atTrace().log("dec URI string (table miss)");
 			String uri = new String(channel.decodeString());
 			// after encoding string value is added to table
 			uc = addUri(uri);
+			LOGGER.atTrace().log("uri {} assigned id {}", uri, uc.getNamespaceUriID());
 		} else {
 			// string value found
 			// ==> value(i+1) is encoded as n-bit unsigned integer
 			uc = getUri(--uriID);
+			LOGGER.atTrace().log("uri table hit; id = {}; uri = {}",
+					uriID, uc.getNamespaceUri());
 		}
 
 		return uc;
@@ -159,6 +165,7 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	protected QNameContext decodeLocalName(RuntimeUriContext uc,
 			DecoderChannel channel) throws IOException {
 
+		LOGGER.atTrace().log("dec local name length");
 		int length = channel.decodeUnsignedInteger();
 
 		QNameContext qnc;
@@ -167,10 +174,13 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 			// string value was not found in local partition
 			// ==> string literal is encoded as a String
 			// with the length of the string incremented by one
+			LOGGER.atTrace().log("dec local name string (table miss)");
 			String localName = new String(channel.decodeStringOnly(length - 1));
 			// After encoding the string value, it is added to the string table
 			// partition and assigned the next available compact identifier.
 			qnc = uc.addQNameContext(localName);
+			LOGGER.atTrace().log("local name {} assigned id {} in partition {}",
+					localName, qnc.getLocalNameID(), uc.getNamespaceUri());
 		} else {
 			// string value found in local partition
 			// ==> string value is represented as zero (0) encoded as an
@@ -179,9 +189,12 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 			// n-bit unsigned integer
 			// n is log2 m and m is the number of entries in the string table
 			// partition
+			LOGGER.atTrace().log("dec local name id (table hit)");
 			int n = MethodsBag.getCodingLength(uc.getNumberOfQNames());
 			int localNameID = channel.decodeNBitUnsignedInteger(n);
 			qnc = uc.getQNameContext(localNameID);
+			LOGGER.atTrace().log("local name {} retrieved from {} parition using id {}",
+					qnc.getLocalName(), qnc.getNamespaceUri(), qnc.getLocalNameID());
 		}
 
 		return qnc;
@@ -254,6 +267,7 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 			nextEvent = ei.getEvent();
 			nextGrammar = ei.getNextGrammar();
 			nextEventType = nextEvent.getEventType();
+			LOGGER.atTrace().log("decoded event code {}", ec);
 		} else {
 			// 2nd level ?
 			int ec2 = decode2ndLevelEventCode();
@@ -263,10 +277,16 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 				int ec3 = decode3rdLevelEventCode();
 				nextEventType = fidelityOptions.get3rdLevelEventType(ec3);
 
+				LOGGER.atTrace().log("decoded event code {}.x.{}", 
+						ec, ec3);
+				
 				// un-set event
 				nextEvent = null;
 				nextGrammar = null;
 			} else {
+				LOGGER.atTrace().log("decoded event code {}.{}", 
+						ec, ec2);
+				
 				nextEventType = fidelityOptions.get2ndLevelEventType(ec2,
 						currentGrammar);
 
@@ -344,9 +364,10 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	protected int decode3rdLevelEventCode() throws EXIException, IOException {
 		int ch3 = fidelityOptions.get3rdLevelCharacteristics();
-
-		return channel.decodeNBitUnsignedInteger(MethodsBag
+		
+		int level3 = channel.decodeNBitUnsignedInteger(MethodsBag
 				.getCodingLength(ch3));
+		return level3;
 	}
 
 	protected final void decodeStartDocumentStructure() throws EXIException {
@@ -448,6 +469,8 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 		assert (nextEventType == EventType.START_ELEMENT);
 		// StartElement
 		StartElement se = ((StartElement) nextEvent);
+		
+		LOGGER.atTrace().log("event: SE({})", se.getQName());
 		// push element
 		pushElement(nextGrammar, se);
 		// handle element prefix
@@ -462,6 +485,8 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 		assert (nextEventType == EventType.START_ELEMENT_NS);
 		// StartElementNS
 		StartElementNS seNS = ((StartElementNS) nextEvent);
+		
+		LOGGER.atTrace().log("event: SE({}:*", seNS.getNamespaceURI());
 		// decode local-name
 		RuntimeUriContext uc = getUri(seNS.getNamespaceUriID());
 		QNameContext qnc = this.decodeLocalName(uc, channel);
@@ -480,6 +505,8 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	protected final QNameContext decodeStartElementGenericStructure()
 			throws IOException {
 		assert (nextEventType == EventType.START_ELEMENT_GENERIC);
+		
+		LOGGER.atTrace().log("event: SE(*)");
 		// decode uri & local-name
 		QNameContext qnc = this.decodeQName(channel);
 
@@ -500,6 +527,9 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	protected final QNameContext decodeStartElementGenericUndeclaredStructure()
 			throws IOException {
 		assert (nextEventType == EventType.START_ELEMENT_GENERIC_UNDECLARED);
+		
+		LOGGER.atTrace().log("event: SE(*)");
+		
 		// decode uri & local-name
 		QNameContext qnc = this.decodeQName(channel);
 
@@ -679,6 +709,8 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	protected final Datatype decodeAttributeStructure() throws EXIException,
 			IOException {
 		Attribute at = ((Attribute) nextEvent);
+		
+		LOGGER.atTrace().log("event: AT({})", at.getQName());
 		// qname
 		attributeQNameContext = at.getQNameContext();
 		// handle attribute prefix
@@ -695,6 +727,9 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 		// AttributeEventNS
 		AttributeNS atNS = ((AttributeNS) nextEvent);
 		RuntimeUriContext uc = getUri(atNS.getNamespaceUriID());
+		
+		LOGGER.atTrace().log("event: AT({}:*)", atNS.getNamespaceURI());
+		
 		attributeQNameContext = decodeLocalName(uc, channel);
 
 		// handle attribute prefix
@@ -710,6 +745,9 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	protected final void decodeAttributeGenericStructure() throws EXIException,
 			IOException {
+		
+		LOGGER.atTrace().log("event: AT(*)");
+		
 		// decode structure
 		decodeAttributeGenericStructureOnly();
 
@@ -719,6 +757,9 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	protected final void decodeAttributeGenericUndeclaredStructure()
 			throws EXIException, IOException {
+		
+		LOGGER.atTrace().log("event: AT(*)");
+		
 		decodeAttributeGenericStructureOnly();
 		getCurrentGrammar()
 				.learnAttribute(new Attribute(attributeQNameContext));
@@ -726,6 +767,9 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	private final void decodeAttributeGenericStructureOnly()
 			throws EXIException, IOException {
+		
+		LOGGER.atTrace().log("event: AT(*)");
+		
 		// decode uri & local-name
 		this.attributeQNameContext = decodeQName(channel);
 
@@ -734,7 +778,7 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	}
 
 	protected final Datatype decodeCharactersStructure() throws EXIException {
-		assert (nextEventType == EventType.CHARACTERS);
+		assert (nextEventType == EventType.CHARACTERS);		
 		// update current rule
 		updateCurrentRule(nextGrammar);
 		return ((Characters) nextEvent).getDatatype();
@@ -783,7 +827,7 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 	}
 
 	protected final char[] decodeCommentStructure() throws EXIException,
-			IOException {
+			IOException {		
 		char[] comment = channel.decodeString();
 		// update current rule
 		updateCurrentRule(getCurrentGrammar().getElementContentGrammar());
@@ -792,7 +836,7 @@ public abstract class AbstractEXIBodyDecoder extends AbstractEXIBodyCoder
 
 	protected final ProcessingInstruction decodeProcessingInstructionStructure()
 			throws EXIException, IOException {
-		// target & data
+		// target & data		
 		String piTarget = new String(channel.decodeString());
 		String piData = new String(channel.decodeString());
 		// update current rule
