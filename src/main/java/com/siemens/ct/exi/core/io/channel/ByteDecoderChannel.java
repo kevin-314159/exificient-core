@@ -38,6 +38,11 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 		DecoderChannel {
 
 	protected InputStream is;
+	
+	/** Number of bytes read */
+	protected long bytesRead;
+	
+	protected final Position pos = new Position();
 
 	public ByteDecoderChannel(InputStream istream) {
 		this.is = istream;
@@ -52,6 +57,7 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 		if (b == -1) {
 			throw new EOFException("Premature EOS found while reading data.");
 		}
+		bytesRead++;
 		return b;
 	}
 
@@ -62,6 +68,7 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 		while (n != 0) {
 			n -= is.skip(n);
 		}
+		bytesRead += n;
 	}
 
 	/**
@@ -105,6 +112,7 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 						"Premature EOS found while reading data.");
 			}
 			readBytes += len;
+			this.bytesRead += len;
 		}
 
 		// int readBytes = is.read(result);
@@ -118,4 +126,12 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 		return result;
 	}
 
+	/** For implementing getPosition(). */
+	private class Position {
+		public String toString() {
+			return Long.toString(bytesRead);
+		}
+	}
+	
+	protected Object getPosition() { return pos; }
 }

@@ -57,6 +57,8 @@ public class StringDecoderImpl extends AbstractStringCoder implements
 	public StringValue readValue(QNameContext context,
 			DecoderChannel valueChannel) throws IOException {
 		StringValue value;
+		
+		LOGGER.atTrace().log("dec value id/len");
 
 		int i = valueChannel.decodeUnsignedInteger();
 
@@ -79,6 +81,7 @@ public class StringDecoderImpl extends AbstractStringCoder implements
 			// ==> string literal is encoded as a String with the length
 			// incremented by two.
 			int L = i - 2;
+			LOGGER.atTrace().log("decode string value (value table miss)");
 			/*
 			 * If length L is greater than zero the string S is added
 			 */
@@ -106,6 +109,7 @@ public class StringDecoderImpl extends AbstractStringCoder implements
 			DecoderChannel valueChannel) throws IOException {
 		assert (localValuePartitions);
 		int n = MethodsBag.getCodingLength(getNumberOfStringValues(qnc));
+		LOGGER.atTrace().log("dec local id (value local hit)");
 		int localID = valueChannel.decodeNBitUnsignedInteger(n);
 		List<StringValue> lvs = localValues.get(qnc);
 		assert (lvs != null);
@@ -116,6 +120,7 @@ public class StringDecoderImpl extends AbstractStringCoder implements
 	public final StringValue readValueGlobalHit(DecoderChannel valueChannel)
 			throws IOException {
 		int numberBitsGlobal = MethodsBag.getCodingLength(globalValues.size());
+		LOGGER.atTrace().log("dec global id (value global hit)");
 		int globalID = valueChannel.decodeNBitUnsignedInteger(numberBitsGlobal);
 		return globalValues.get(globalID);
 	}

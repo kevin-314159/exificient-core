@@ -54,6 +54,11 @@ final public class BitInputStream {
 	 * Underlying input stream.
 	 */
 	private InputStream istream;
+	
+	/**
+	 * Number of bytes fully read.
+	 */
+	private long bytesRead = 0;
 
 	/**
 	 * Construct an instance of this class from an input stream.
@@ -78,7 +83,8 @@ final public class BitInputStream {
 		buffer = capacity = 0;
 	}
 
-	// read direct byte
+	// read direct byte; don't increase bytesRead as the byte may not be
+	// fully read, depending on how the caller uses it.
 	private final int readDirectByte() throws IOException {
 		int b;
 		if ((b = istream.read()) == -1) {
@@ -88,13 +94,30 @@ final public class BitInputStream {
 	}
 
 	/**
-	 * If buffer is empty, read byte from underlying stream.
+	 * Read byte from underlying stream.  Only call this if the buffer is
+	 * empty (capacity == 0).
 	 */
 	private final void readBuffer() throws IOException {
 		buffer = readDirectByte();
 		capacity = BUFFER_CAPACITY;
+		// data is in buffer and not fully read so bytesRead is unchanged
 	}
 
+	/** Return true if reader is aligned on a byte boundary. */
+	public boolean isAligned() { 
+		return capacity == 0 || capacity == BUFFER_CAPACITY; 
+	}
+	
+	/** Return the number of bits used in the current byte.
+	 * The returned value will be in [0, 7], and 0 when isAligned() is true.
+	 */
+	public int getBitsUsed() {
+		return isAligned() ? 0 : BUFFER_CAPACITY - capacity; 
+	}
+	
+	/** Return the number of bytes that have been fully read. */
+	public long getBytesRead() { return bytesRead; }
+	
 	/**
 	 * Discard any bits currently in the buffer to byte-align stream
 	 * 
@@ -104,11 +127,14 @@ final public class BitInputStream {
 	public void align() throws IOException {
 		if (capacity != 0) {
 			capacity = 0;
+			bytesRead++;
 		}
 	}
 
 	/**
-	 * Returns current byte buffer without actually reading data
+	 * Returns current byte buffer without actually reading data.
+	 * Note that some of the returned value will already have been read
+	 * if isAligned() is false.
 	 * 
 	 * @throws IOException
 	 *             IO exception
@@ -132,6 +158,7 @@ final public class BitInputStream {
 	public void skip(long n) throws IOException {
 		if (capacity == 0) {
 			// aligned
+			bytesRead += n;
 			while (n != 0) {
 				n -= istream.skip(n);
 			}
@@ -154,6 +181,9 @@ final public class BitInputStream {
 		if (capacity == 0) {
 			readBuffer();
 		}
+		
+		if (capacity == 1) bytesRead++;
+		
 		return (buffer >> --capacity) & 0x1;
 	}
 
@@ -173,34 +203,38 @@ final public class BitInputStream {
 
 		if (n <= capacity) {
 			// buffer already holds all necessary bits
+			if (n == capacity) bytesRead++;
 			result = (buffer >> (capacity -= n))
 					& (0xff >> (BUFFER_CAPACITY - n));
 		} else if (capacity == 0 && n == BUFFER_CAPACITY) {
 			// possible to read direct byte, nothing else to do
 			result = readDirectByte();
+			bytesRead++;
 		} else {
 			// get as many bits from buffer as possible
 			result = buffer & (0xff >> (BUFFER_CAPACITY - capacity));
 			n -= capacity;
+			if (capacity > 0) bytesRead++;
 			capacity = 0;
 
 			// possibly read whole bytes
 			while (n > 7) {
-				if (capacity == 0) {
-					readBuffer();
-				}
+				assert capacity == 0;
+				readBuffer();
+				
 				result = (result << BUFFER_CAPACITY) | buffer;
 				n -= BUFFER_CAPACITY;
-				capacity = 0;
+				capacity = 0;	// reset it after readBuffer
+				bytesRead++;
 			}
 
 			// read the rest of the bits
 			if (n > 0) {
-				if (capacity == 0) {
-					readBuffer();
-				}
+				assert capacity == 0;
+				readBuffer();
 				result = (result << n)
 						| (buffer >> (capacity = (BUFFER_CAPACITY - n)));
+				//bytesRead not incremented b/c n <=7 
 			}
 		}
 
@@ -216,8 +250,11 @@ final public class BitInputStream {
 	 */
 	public final int read() throws IOException {
 		// possible to read direct byte?
-		return (capacity == 0) ? readDirectByte() : this
-				.readBits(BUFFER_CAPACITY);
+		if (capacity == 0) {
+			bytesRead++;
+			return readDirectByte();
+		}
+		else return this.readBits(BUFFER_CAPACITY);
 	}
 
 	public void read(byte b[], int off, final int len) throws IOException {
@@ -244,5 +281,7 @@ final public class BitInputStream {
 			}
 
 		}
+		
+		bytesRead += len;
 	}
 }

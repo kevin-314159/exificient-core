@@ -44,6 +44,8 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 	 * Underlying bit input stream from which bits and bytes are read.
 	 */
 	protected BitInputStream istream;
+	
+	protected final Position pos = new Position();
 
 	/**
 	 * Construct a decoder from input stream
@@ -60,7 +62,11 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 	}
 
 	public void align() throws IOException {
-		istream.align();
+		if (!istream.isAligned()) {
+			LOGGER.trace(marker, "dec {} bits to align reader @ pos [{}]", 
+					8 - istream.getBitsUsed(), pos);
+			istream.align();
+		}
 	}
 
 	public int lookAhead() throws IOException {
@@ -76,6 +82,7 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 	 */
 	public final int decodeNBitUnsignedInteger(int n) throws IOException {
 		assert (n >= 0);
+		LOGGER.trace(marker, "dec {}-bit unsigned int @ pos [{}]", n, pos);
 		return (n == 0 ? 0 : istream.readBits(n));
 	}
 
@@ -84,6 +91,7 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 	 * 0, and the value true is represented by the bit 1.
 	 */
 	public boolean decodeBoolean() throws IOException {
+		LOGGER.trace(marker, "dec boolean, 1 bit @ pos[{}]", pos);
 		return (istream.readBit() == 1);
 	}
 
@@ -91,11 +99,32 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 	 * Decode a binary value as a length-prefixed sequence of octets.
 	 */
 	public byte[] decodeBinary() throws IOException {
+		LOGGER.trace(marker, "dec binary value length");
 		final int length = decodeUnsignedInteger();
 		byte[] result = new byte[length];
 
+		LOGGER.trace(marker, "dec binary value content, {} bytes @ pos[{}]", length, pos);
 		istream.read(result, 0, length);
 		return result;
 	}
 
+	/** For implementing getPosition(). */
+	private class Position {
+		private final StringBuilder sb = new StringBuilder();
+		
+		public String toString() {
+			if (istream.isAligned()) {
+				return Long.toString(istream.getBytesRead());	
+			}
+			else {
+				sb.setLength(0);
+				sb.append(istream.getBytesRead());
+				sb.append(':');
+				sb.append(istream.getBitsUsed());
+				return sb.toString();
+			}
+		}
+	}
+	
+	protected Object getPosition() { return pos; }
 }

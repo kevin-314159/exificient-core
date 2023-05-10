@@ -26,9 +26,6 @@ package com.siemens.ct.exi.core.io.channel;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.slf4j.Marker;
-import org.slf4j.MarkerFactory;
-
 import com.siemens.ct.exi.core.io.BitOutputStream;
 
 /**
@@ -140,8 +137,9 @@ public class BitEncoderChannel extends AbstractEncoderChannel implements
 	 *
 	 */
 	private class Position {
+		private final StringBuilder sb = new StringBuilder();
 		public String toString() {
-			StringBuilder sb = new StringBuilder();
+			sb.setLength(0);
 			sb.append(ostream.getLength());
 			if (!ostream.isByteAligned()) {
 				sb.append(':');

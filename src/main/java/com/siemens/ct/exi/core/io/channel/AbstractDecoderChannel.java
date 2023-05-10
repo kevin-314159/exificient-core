@@ -26,6 +26,11 @@ package com.siemens.ct.exi.core.io.channel;
 import java.io.IOException;
 import java.math.BigInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
+
 import com.siemens.ct.exi.core.types.DateTimeType;
 import com.siemens.ct.exi.core.values.BooleanValue;
 import com.siemens.ct.exi.core.values.DateTimeValue;
@@ -50,6 +55,27 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	/* Helper for building strings */
 	protected StringBuilder sbHelper;
 
+	/**
+	 * Logger for use by this class and subclasses.
+	 */
+	protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractDecoderChannel.class);
+			
+	/**
+	 * Marker to use when logging.
+	 * When a log-generating function A calls a log-generating function B,
+	 * A may add a {@link Marker} to marker before the call to B, and remove it after the
+	 * call to B, so that B's events that occur in the context of A can be
+	 * filtered out by the marker.  This is used, for example, to mark events
+	 * associated with decoding the individual characters of a string.
+	 */
+	protected Marker marker = MarkerFactory.getMarker("");
+	
+	/**
+	 *  Marker for individual character events.
+	 */
+	protected static final Marker CHAR_MARKER = 
+			MarkerFactory.getMarker("CHARACTER_LEVEL");	
+	
 	public AbstractDecoderChannel() {
 	}
 
@@ -65,6 +91,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	 * that are represented as UTF-16 surrogate pairs in Java.
 	 */
 	public char[] decodeString() throws IOException {
+		LOGGER.trace(marker, "dec string length");
 		return decodeStringOnly(decodeUnsignedInteger());
 	}
 
@@ -80,6 +107,10 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	public char[] decodeStringOnly(int length) throws IOException {
 
 		final char[] ca = new char[length];
+		
+		LOGGER.trace(marker, "dec string content, {} bytes @ pos [{}]", length, getPosition());
+		
+		marker.add(CHAR_MARKER);
 
 		for (int i = 0; i < length; i++) {
 			final int codePoint = decodeUnsignedInteger();
@@ -92,6 +123,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 				ca[i] = (char) codePoint;
 			}
 		}
+		
+		marker.remove(CHAR_MARKER);
 
 		return ca;
 	}
@@ -128,6 +161,10 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	 */
 	public final int decodeUnsignedInteger() throws IOException {
 		// 0XXXXXXX ... 1XXXXXXX 1XXXXXXX
+		
+		LOGGER.trace(marker, "dec unsigned integer @ pos [{}]", getPosition());
+		
+		int byteCnt = 1;
 		int result = decode();
 
 		// < 128: just one byte, optimal case
@@ -140,6 +177,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 
 			do {
 				// 1. Read the next octet
+				byteCnt += 1;
 				b = decode();
 				// 2. Multiply the value of the unsigned number represented by
 				// the 7 least significant
@@ -153,6 +191,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 			} while (b >= 128);
 		}
 
+		LOGGER.trace(marker, "decoded {} bytes", byteCnt);
 		return result;
 	}
 
@@ -160,13 +199,19 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 		long lResult = 0L;
 		int mShift = 0;
 		int b;
+		int byteCnt = 0;
 
+		LOGGER.trace(marker, "decode unsigned long @ pos [{}]", getPosition());
+		
 		do {
 			b = decode();
+			byteCnt++;
 			lResult += ((long) (b & 127)) << mShift;
 			mShift += 7;
 		} while ((b >>> 7) == 1);
 
+		LOGGER.trace(marker, "decoded {} bytes", byteCnt);
+		
 		return lResult;
 	}
 
@@ -181,6 +226,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	 *             IO exception
 	 */
 	protected int decodeInteger() throws IOException {
+		LOGGER.trace(marker, "dec integer minus sign flag");
+		
 		if (decodeBoolean()) {
 			// For negative values, the Unsigned Integer holds the
 			// magnitude of the value minus 1
@@ -192,6 +239,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	}
 
 	protected long decodeLong() throws IOException {
+		LOGGER.trace(marker, "dec integer minus sign flag");
+		
 		if (decodeBoolean()) {
 			// For negative values, the Unsigned Integer holds the
 			// magnitude of the value minus 1
@@ -203,6 +252,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	}
 
 	public IntegerValue decodeIntegerValue() throws IOException {
+		LOGGER.trace(marker, "dec integer minus sign flag");
+		
 		return decodeUnsignedIntegerValue(decodeBoolean());
 	}
 
@@ -213,9 +264,14 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	protected final IntegerValue decodeUnsignedIntegerValue(boolean negative)
 			throws IOException {
 		int b;
+		int byteCnt = 0;
+		
+		LOGGER.trace(marker, "dec unsigned integer value @ pos [{}]", getPosition());
+		
 		for (int i = 0; i < MAX_OCTETS_FOR_LONG; i++) {
 			// Read the next octet
 			b = decode();
+			byteCnt++;
 			// If the most significant bit of the octet was 1,
 			// another octet is going to come
 			if (b < 128) {
@@ -223,6 +279,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 				switch (i) {
 				case 0:
 					/* one octet only */
+					LOGGER.trace(marker, "decoded 1 byte");
 					return IntegerValue.valueOf(negative ? -(b + 1) : b);
 				case 1:
 				case 2:
@@ -236,6 +293,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 					}
 					// For negative values, the Unsigned Integer holds the
 					// magnitude of the value minus 1
+					LOGGER.trace(marker, "decoded {} bytes",
+							byteCnt);
 					return IntegerValue.valueOf(negative ? -(iResult + 1)
 							: iResult);
 				default:
@@ -248,6 +307,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 					}
 					// For negative values, the Unsigned Integer holds the
 					// magnitude of the value minus 1
+					LOGGER.trace(marker, "decoded {} bytes",
+							byteCnt);
 					return IntegerValue.valueOf(negative ? -(lResult + 1L)
 							: lResult);
 				}
@@ -270,6 +331,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 		do {
 			// 1. Read the next octet
 			b = decode();
+			byteCnt++;
 			// 2. The 7 least significant bits hold the value
 			bResult = bResult.add(multiplier.multiply(BigInteger
 					.valueOf(b & 127)));
@@ -285,6 +347,7 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 			bResult = bResult.add(BigInteger.ONE).negate();
 		}
 
+		LOGGER.trace(marker, "decoded {} bytes", byteCnt);
 		return IntegerValue.valueOf(bResult);
 	}
 
@@ -293,6 +356,8 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	 */
 	public IntegerValue decodeNBitUnsignedIntegerValue(int n)
 			throws IOException {
+		LOGGER.trace(marker, "dec {}-bit unsigned integer @ pos [{}]",
+				n, getPosition());
 		return IntegerValue.valueOf(decodeNBitUnsignedInteger(n));
 	}
 
@@ -307,7 +372,9 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	public DecimalValue decodeDecimalValue() throws IOException {
 		boolean negative = decodeBoolean();
 
+		LOGGER.trace(marker, "dec decimal integer part");
 		IntegerValue integral = decodeUnsignedIntegerValue(false);
+		LOGGER.trace(marker, "dec decimal fraction");
 		IntegerValue revFractional = decodeUnsignedIntegerValue(false);
 
 		return new DecimalValue(negative, integral, revFractional);
@@ -319,7 +386,10 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 	 * Integer represents the 10-based exponent of the floating point number
 	 */
 	public FloatValue decodeFloatValue() throws IOException {
-		return new FloatValue(decodeIntegerValue(), decodeIntegerValue());
+		LOGGER.trace(marker, "dec float mantissa");
+		IntegerValue mantissa = decodeIntegerValue(); 
+		LOGGER.trace(marker, "dec float exponent");
+		return new FloatValue(mantissa, decodeIntegerValue());
 	}
 
 	/**
@@ -332,24 +402,35 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 
 		switch (type) {
 		case gYear: // Year, [Time-Zone]
+			LOGGER.trace(marker, "dec dt year");
 			year = decodeInteger() + DateTimeValue.YEAR_OFFSET;
 			break;
 		case gYearMonth: // Year, MonthDay, [TimeZone]
 		case date: // Year, MonthDay, [TimeZone]
+			LOGGER.trace(marker, "dec dt year");
 			year = decodeInteger() + DateTimeValue.YEAR_OFFSET;
+			LOGGER.trace(marker, "dec dt monthDay");
 			monthDay = decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_MONTHDAY);
 			break;
 		case dateTime: // Year, MonthDay, Time, [FractionalSecs], [TimeZone]
 			// e.g. "0001-01-01T00:00:00.111+00:33";
+			LOGGER.trace(marker, "dec dt year");
 			year = decodeInteger() + DateTimeValue.YEAR_OFFSET;
+			LOGGER.trace(marker, "dec dt monthDay");
 			monthDay = decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_MONTHDAY);
 			// Note: *no* break;
 		case time: // Time, [FractionalSecs], [TimeZone]
 			// e.g. "12:34:56.135"
+			LOGGER.trace(marker, "dec dt time");
 			time = decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_TIME);
+			LOGGER.trace(marker, "dec dt frac sec presence");
 			boolean presenceFractionalSecs = decodeBoolean();
-			fractionalSecs = presenceFractionalSecs ? decodeUnsignedInteger()
-					: 0;
+			if (presenceFractionalSecs) {
+				LOGGER.trace(marker, "dec dt frac secs");
+				fractionalSecs = decodeUnsignedInteger();
+			}
+			else fractionalSecs = 0;
+
 			break;
 		case gMonth: // MonthDay, [TimeZone]
 			// e.g. "--12"
@@ -357,19 +438,31 @@ public abstract class AbstractDecoderChannel implements DecoderChannel {
 			// e.g. "--01-28"
 		case gDay: // MonthDay, [TimeZone]
 			// "---16";
+			LOGGER.trace(marker, "dec dt monthDay");
 			monthDay = decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_MONTHDAY);
 			break;
 		default:
 			throw new UnsupportedOperationException();
 		}
 
+		LOGGER.trace(marker, "dec dt timezone presence");
 		boolean presenceTimezone = decodeBoolean();
-		int timeZone = presenceTimezone ? decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_TIMEZONE)
-				- DateTimeValue.TIMEZONE_OFFSET_IN_MINUTES
-				: 0;
+		int timeZone;
+		
+		if (presenceTimezone) { 
+			LOGGER.trace(marker, "dec dt timezone");
+			timeZone = decodeNBitUnsignedInteger(DateTimeValue.NUMBER_BITS_TIMEZONE) - DateTimeValue.TIMEZONE_OFFSET_IN_MINUTES;				
+		}
+		else timeZone = 0;
 
 		return new DateTimeValue(type, year, monthDay, time, fractionalSecs,
 				presenceTimezone, timeZone);
 	}
+	
+	/**
+	 * Return an Object whose toString() method returns the current
+	 * decoder position in a format that can be used for logging.
+	 */
+	abstract protected Object getPosition();
 
 }
