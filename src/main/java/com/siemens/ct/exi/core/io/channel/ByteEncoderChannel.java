@@ -136,8 +136,13 @@ final public class ByteEncoderChannel extends AbstractEncoderChannel implements
 	 *
 	 */
 	private class Position {
+		private final StringBuilder sb = new StringBuilder();
 		public String toString() {
-			return Integer.toString(len);
+			sb.setLength(0);
+			sb.append(len);
+			sb.append(';');
+			sb.append(len*8);
+			return sb.toString();
 		}
 	}
 	

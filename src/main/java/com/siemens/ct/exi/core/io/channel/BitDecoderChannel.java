@@ -113,16 +113,21 @@ public class BitDecoderChannel extends AbstractDecoderChannel implements
 		private final StringBuilder sb = new StringBuilder();
 		
 		public String toString() {
-			if (istream.isAligned()) {
-				return Long.toString(istream.getBytesRead());	
-			}
-			else {
-				sb.setLength(0);
-				sb.append(istream.getBytesRead());
+			long bytelen = istream.getBytesRead();
+			int nbits = 0;
+			sb.setLength(0);
+			sb.append(bytelen);
+			
+			if (!istream.isAligned()) {
 				sb.append(':');
-				sb.append(istream.getBitsUsed());
-				return sb.toString();
+				nbits = istream.getBitsUsed();
+				sb.append(nbits);
 			}
+			
+			sb.append(';');
+			sb.append(bytelen * 8 + nbits);
+			
+			return sb.toString();
 		}
 	}
 	

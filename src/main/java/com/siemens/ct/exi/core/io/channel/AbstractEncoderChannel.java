@@ -198,7 +198,6 @@ public abstract class AbstractEncoderChannel implements EncoderChannel {
 		}
 
 		if (n < 128) {
-			LOGGER.trace(marker, "enc unsigned int in 1 byte");
 			// write byte as is
 			encode(n);
 		} else {

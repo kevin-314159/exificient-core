@@ -128,8 +128,13 @@ public class ByteDecoderChannel extends AbstractDecoderChannel implements
 
 	/** For implementing getPosition(). */
 	private class Position {
+		private final StringBuilder sb = new StringBuilder();
 		public String toString() {
-			return Long.toString(bytesRead);
+			sb.setLength(0);
+			sb.append(bytesRead);
+			sb.append(';');
+			sb.append(bytesRead*8);
+			return sb.toString();
 		}
 	}
 	
